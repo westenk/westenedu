@@ -1,75 +1,83 @@
 from pathlib import Path
+import re
 
-source_path = Path("/mnt/data/Pasted text.txt")
-source = source_path.read_text(encoding="utf-8")
+src = Path("/mnt/data/neon_district_3d_shooter_admin_fixed.html")
+html = src.read_text()
 
-start = source.index("html = r'''") + len("html = r'''")
-end = source.index("'''", start)
-html = source[start:end]
+# Remove any previous gate-handler script(s) at the end and replace with one reliable handler.
+marker = '<script>\n(() => {\n const gate = document.getElementById(\'accessGate\');'
+start = html.rfind(marker)
+if start == -1:
+    raise RuntimeError("Could not locate the access-code script.")
 
-gate_css = """
-#accessGate{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
-background:radial-gradient(ellipse at center,#10283bfa,#02050bf7);padding:20px}
-.gatebox{width:min(420px,92vw);padding:30px;text-align:center;border:1px solid #5cf4ff88;
-border-radius:16px;background:linear-gradient(145deg,#0b1a2bed,#050a14f5);box-shadow:0 0 70px #00d9ff25}
-.gatebox h1{font-size:clamp(28px,6vw,42px);margin-bottom:8px}
-#accessCode{width:180px;margin:18px auto 12px;display:block;text-align:center;font-size:28px;
-letter-spacing:12px;padding:12px 8px;border-radius:8px;border:1px solid #5cf4ff;
-background:#061321;color:#eaffff;outline:none}
-#gateError{min-height:22px;color:#ff6b91;font-size:13px}
-"""
+# The gate handler is the final script before </body>; replace through its closing script tag.
+end = html.find("</script>", start)
+if end == -1:
+    raise RuntimeError("Could not find the end of the access-code script.")
+end += len("</script>")
 
-gate_html = """
-<div id="accessGate">
- <div class="gatebox">
-  <div class="label">ROGUE SYSTEMS SECURITY</div>
-  <h1>NEON DISTRICT</h1>
-  <p class="sub">ENTER YOUR 4-DIGIT ACCESS CODE TO CONTINUE</p>
-  <form id="accessForm">
-   <input id="accessCode" type="password" inputmode="numeric" pattern="[0-9]{4}"
-    maxlength="4" minlength="4" autocomplete="off" placeholder="••••"
-    aria-label="Four digit access code" required>
-   <button class="btn" type="submit">UNLOCK GAME</button>
-  </form>
-  <div id="gateError" role="alert"></div>
- </div>
-</div>
-"""
-
-gate_script = """
-<script>
+fixed_gate = r"""<script>
 (() => {
- const gate = document.getElementById('accessGate');
- const form = document.getElementById('accessForm');
- const input = document.getElementById('accessCode');
- const error = document.getElementById('gateError');
+  const gate = document.getElementById('accessGate');
+  const form = document.getElementById('accessForm');
+  const input = document.getElementById('accessCode');
+  const error = document.getElementById('gateError');
+  const expectedHash = '878f96264ece1c85973dfa3b39dec9a7dc4cf6f08168ff5a183389a36b1bb9d0';
 
- form.addEventListener('submit', event => {
-  event.preventDefault();
-  if (input.value === '0729') {
-   gate.style.display = 'none';
-   document.getElementById('startBtn').focus();
-  } else {
-   error.textContent = 'INCORRECT CODE — TRY AGAIN';
-   input.value = '';
-   input.focus();
+  if (!gate || !form || !input || !error) {
+    console.error('Access gate elements are missing.');
+    return;
   }
- });
- input.addEventListener('input', () => {
-  input.value = input.value.replace(/\\\\D/g, '').slice(0, 4);
-  error.textContent = '';
- });
- input.focus();
+
+  input.addEventListener('input', () => {
+    input.value = input.value.replace(/[^0-9]/g, '').slice(0, 4);
+    error.textContent = '';
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const entered = input.value.trim();
+    if (!/^[0-9]{4}$/.test(entered)) {
+      error.textContent = 'ENTER ALL 4 DIGITS';
+      input.focus();
+      return;
+    }
+
+    let valid = false;
+    try {
+      // SHA-256 check where Web Crypto is available.
+      if (globalThis.crypto && crypto.subtle && typeof TextEncoder !== 'undefined') {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(entered));
+        const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+        valid = hash === expectedHash;
+      } else {
+        // Local-file fallback: keeps the game usable in browsers that disable Web Crypto for file:// pages.
+        valid = entered === String.fromCharCode(48, 55, 50, 57);
+      }
+    } catch (e) {
+      // Also fall back if a browser blocks the crypto operation.
+      valid = entered === String.fromCharCode(48, 55, 50, 57);
+    }
+
+    if (valid) {
+      gate.style.display = 'none';
+      gate.setAttribute('aria-hidden', 'true');
+      const startButton = document.getElementById('startBtn');
+      if (startButton) startButton.focus();
+    } else {
+      error.textContent = 'INCORRECT CODE — TRY AGAIN';
+      input.value = '';
+      input.focus();
+    }
+  });
+
+  input.focus();
 })();
-</script>
-"""
+</script>"""
 
-html = html.replace("</style>", gate_css + "\n</style>", 1)
-html = html.replace('<div id="game"></div>', gate_html + '\n<div id="game"></div>', 1)
-html = html.replace("</body>", gate_script + "\n</body>", 1)
+html = html[:start] + fixed_gate + html[end:]
 
-output_path = Path("/mnt/data/neon_district_3d_shooter_code_0729.html")
-output_path.write_text(html, encoding="utf-8")
-
-print(f"Created: {output_path}")
-print(f"Size: {output_path.stat().st_size:,} bytes")
+out = Path("/mnt/data/neon_district_3d_shooter_admin_code_fixed.html")
+out.write_text(html)
+print(f"Fixed access-code handler and removed duplicate script: {out}")
+print(f"Size: {out.stat().st_size:,} bytes")
