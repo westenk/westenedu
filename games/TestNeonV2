@@ -1,0 +1,9 @@
+import webbrowser
+
+path = Path("/mnt/data/neon_district_3d_shooter.html")
+path.write_text(html, encoding="utf-8")
+
+print(f"Created {path} ({path.stat().st_size:,} bytes)")
+
+# Automatically open the game in your default browser
+webbrowser.open(path.as_uri())
