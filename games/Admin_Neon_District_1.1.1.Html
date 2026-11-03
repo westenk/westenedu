@@ -1,0 +1,75 @@
+from pathlib import Path
+
+source_path = Path("/mnt/data/Pasted text.txt")
+source = source_path.read_text(encoding="utf-8")
+
+start = source.index("html = r'''") + len("html = r'''")
+end = source.index("'''", start)
+html = source[start:end]
+
+gate_css = """
+#accessGate{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+background:radial-gradient(ellipse at center,#10283bfa,#02050bf7);padding:20px}
+.gatebox{width:min(420px,92vw);padding:30px;text-align:center;border:1px solid #5cf4ff88;
+border-radius:16px;background:linear-gradient(145deg,#0b1a2bed,#050a14f5);box-shadow:0 0 70px #00d9ff25}
+.gatebox h1{font-size:clamp(28px,6vw,42px);margin-bottom:8px}
+#accessCode{width:180px;margin:18px auto 12px;display:block;text-align:center;font-size:28px;
+letter-spacing:12px;padding:12px 8px;border-radius:8px;border:1px solid #5cf4ff;
+background:#061321;color:#eaffff;outline:none}
+#gateError{min-height:22px;color:#ff6b91;font-size:13px}
+"""
+
+gate_html = """
+<div id="accessGate">
+ <div class="gatebox">
+  <div class="label">ROGUE SYSTEMS SECURITY</div>
+  <h1>NEON DISTRICT</h1>
+  <p class="sub">ENTER YOUR 4-DIGIT ACCESS CODE TO CONTINUE</p>
+  <form id="accessForm">
+   <input id="accessCode" type="password" inputmode="numeric" pattern="[0-9]{4}"
+    maxlength="4" minlength="4" autocomplete="off" placeholder="••••"
+    aria-label="Four digit access code" required>
+   <button class="btn" type="submit">UNLOCK GAME</button>
+  </form>
+  <div id="gateError" role="alert"></div>
+ </div>
+</div>
+"""
+
+gate_script = """
+<script>
+(() => {
+ const gate = document.getElementById('accessGate');
+ const form = document.getElementById('accessForm');
+ const input = document.getElementById('accessCode');
+ const error = document.getElementById('gateError');
+
+ form.addEventListener('submit', event => {
+  event.preventDefault();
+  if (input.value === '0729') {
+   gate.style.display = 'none';
+   document.getElementById('startBtn').focus();
+  } else {
+   error.textContent = 'INCORRECT CODE — TRY AGAIN';
+   input.value = '';
+   input.focus();
+  }
+ });
+ input.addEventListener('input', () => {
+  input.value = input.value.replace(/\\\\D/g, '').slice(0, 4);
+  error.textContent = '';
+ });
+ input.focus();
+})();
+</script>
+"""
+
+html = html.replace("</style>", gate_css + "\n</style>", 1)
+html = html.replace('<div id="game"></div>', gate_html + '\n<div id="game"></div>', 1)
+html = html.replace("</body>", gate_script + "\n</body>", 1)
+
+output_path = Path("/mnt/data/neon_district_3d_shooter_code_0729.html")
+output_path.write_text(html, encoding="utf-8")
+
+print(f"Created: {output_path}")
+print(f"Size: {output_path.stat().st_size:,} bytes")
